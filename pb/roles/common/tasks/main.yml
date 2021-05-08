@@ -1,0 +1,17 @@
+---
+# tasks file for common
+# tasks file for common 
+- name: Upgrade system
+  apt:
+    upgrade: yes
+  ignore_errors: yes
+
+- name: Install required packages
+  apt: 
+    name: "{{ apt_packages }}" 
+    state: present
+    update_cache: yes
+    autoclean: yes
+    autoremove: yes
+ 
+  ignore_errors: yes
