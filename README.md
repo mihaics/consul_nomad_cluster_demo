@@ -113,6 +113,181 @@ Examples to access the main server):
 $vagrant ssh consul1.cluster
 ```
 
+Mor einformation about ssh connection can be obtained from vagrat:
+
+```
+$vagrant ssh-config consul1.Cluster
+
+Host consul1.cluster
+  HostName 127.0.0.1
+  User vagrant
+  Port 2222
+  UserKnownHostsFile /dev/null
+  StrictHostKeyChecking no
+  PasswordAuthentication no
+  IdentityFile /home/mihai/work/github/consul_nomad_cluster_demo/vbox/.vagrant/machines/consul1.cluster/virtualbox/private_key
+  IdentitiesOnly yes
+  LogLevel FATAL
+```
 
 
+Some useful tests inside VM (consul1.cluster in this case):
+
+```
+vagrant@consul1:~$ consul members
+Node     Address              Status  Type    Build  Protocol  DC   Segment
+consul1  192.168.56.11:8301   alive   server  1.8.7  2         dc1  <all>
+consul2  192.168.56.12:8301   alive   server  1.8.7  2         dc1  <all>
+consul3  192.168.56.13:8301   alive   server  1.8.7  2         dc1  <all>
+worker1  192.168.56.101:8301  alive   client  1.8.7  2         dc1  <default>
+worker2  192.168.56.102:8301  alive   client  1.8.7  2         dc1  <default>
+worker3  192.168.56.103:8301  alive   client  1.8.7  2         dc1  <default>
+```
+
+For nomad, use the expenal IP:
+
+vagrant@consul1:~$ nomad server members -address=http://192.168.56.11:4646/
+Name            Address        Port  Status  Leader  Protocol  Build  Datacenter  Region
+consul1.global  192.168.56.11  4648  alive   false   2         1.0.4  dc1         global
+consul2.global  192.168.56.12  4648  alive   true    2         1.0.4  dc1         global
+consul3.global  192.168.56.13  4648  alive   false   2         1.0.4  dc1         global
+
+
+DNS is forwarding the requests to consul, so you can use actually the resolver:
+
+```
+vagrant@consul1:~$ nomad node status -address=http://nomad-servers.service.dc1.consul:4646/
+ID        DC   Name     Class   Drain  Eligibility  Status
+174218dc  dc1  worker2  <none>  false  eligible     ready
+24baf6ce  dc1  worker3  <none>  false  eligible     ready
+85e7c4fa  dc1  worker1  <none>  false  eligible     ready
+```
+
+
+The dns resolver is working also from host, if you querry the right machine (one of the consul servers):
+
+
+```
+dig @192.168.56.11 nomad-servers.service.dc1.consul
+
+; <<>> DiG 9.16.6-Ubuntu <<>> @192.168.56.11 nomad-servers.service.dc1.consul
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 45052
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 3, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 4096
+;; QUESTION SECTION:
+;nomad-servers.service.dc1.consul. IN	A
+
+;; ANSWER SECTION:
+nomad-servers.service.dc1.consul. 0 IN	A	192.168.56.13
+nomad-servers.service.dc1.consul. 0 IN	A	192.168.56.12
+nomad-servers.service.dc1.consul. 0 IN	A	192.168.56.11
+
+;; Query time: 6 msec
+;; SERVER: 192.168.56.11#53(192.168.56.11)
+;; WHEN: Sat May 08 10:59:10 EEST 2021
+;; MSG SIZE  rcvd: 109
+```
+
+
+## How to submit a job to the cluster
+
+If you have nomad installed locally, you can use it to schedule a job.  A demo job is in the repository main folder (one level up from vbox):
+
+```
+nomad job plan -address=http://192.168.56.11:4646/  ../demo.nomad 
++ Job: "docs"
++ Task Group: "example" (1 create)
+  + Task: "server" (forces create)
+
+Scheduler dry-run:
+- All tasks successfully allocated.
+
+Job Modify Index: 0
+To submit the job with version verification run:
+
+nomad job run -check-index 0 ../demo.nomad
+
+
+When running the job with the check-index flag, the job will only be run if the
+server side version matches the job modify index returned. If the index has
+changed, another user has modified the job and the plan's results are
+potentially invalid.
+```
+
+
+Schedule the job: 
+
+```
+nomad job run -address=http://192.168.56.11:4646/  ../demo.nomad
+==> Monitoring evaluation "97fa6750"
+    Evaluation triggered by job "docs"
+    Evaluation within deployment: "48963f51"
+    Allocation "c8485d8f" created: node "24baf6ce", group "example"
+    Evaluation status changed: "pending" -> "complete"
+==> Evaluation "97fa6750" finished with status "complete"
+```
+
+Inspect your job: 
+
+```
+ nomad job inspect -address=http://192.168.56.11:4646/ doc 
+```
+
+
+Consult consul catalog for service:
+
+```
+vagrant@consul1:~$ consul catalog services 
+consul
+docs-example-server
+nomad-clients
+nomad-servers
+```
+
+Get the service IP from the host:
+
+
+```
+dig @192.168.56.11 docs-example-server.service.dc1.consul
+
+; <<>> DiG 9.16.6-Ubuntu <<>> @192.168.56.11 docs-example-server.service.dc1.consul
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 32953
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 4096
+;; QUESTION SECTION:
+;docs-example-server.service.dc1.consul.	IN A
+
+;; ANSWER SECTION:
+docs-example-server.service.dc1.consul.	0 IN A	10.0.2.15
+
+;; Query time: 3 msec
+;; SERVER: 192.168.56.11#53(192.168.56.11)
+;; WHEN: Sat May 08 11:37:48 EEST 2021
+;; MSG SIZE  rcvd: 83
+```
+
+The VM has 2 interfaces, docker binds to the first one.
+
+TODO: fix interface binding for app (cni? vagrant option to delete the NAT interface?, docker binding to private_network?)
+
+
+
+## Gateway and proxy with nginx or traefik
+
+
+TODO: 
+ - for nginx, consul agent and consul template could be deployed to keep nginx configuration when the app is moving to another worker
+ - traefik: can directly use consul service discovery
+
+ 
 
