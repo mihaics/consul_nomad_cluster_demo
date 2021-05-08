@@ -1,11 +1,11 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-
+# see https://app.vagrantup.com/boxes/search?provider=virtualbox
 VM_BOX = "ubuntu/groovy64"
 PROVIDER = "virtualbox"
 DOMAIN_NAME = "cluster"
-# configure network subnet in virtualbox, here is vbox0
+# configure network subnet for internal communication
 NETWORK_SUBNET = "192.168.56"
 SERVER_HOST_IPS_START = 10
 SERVER_MEMORY = "1024"
@@ -14,25 +14,31 @@ WORKER_MEMORY = "1024"
 NUM_SERVER_NODES = 3
 NUM_WORKER_NODES = 3
 NUM_GW_NODES = 1
-ENABLE_VB_GUI = true
+GW_HOST_IPS_START = 200
+GW_MEMORY = "1024"
+ENABLE_VB_GUI = false
 LINK_CLONES = true
+CWD = File.dirname(File.expand_path(__FILE__))
+PLAYBOOK_DIR = "../pb"
+
 
 Vagrant.configure("2") do |config|
+
+
+
+
 
 
   (1..NUM_SERVER_NODES).each do |n|
     config.vm.define "consul#{n}.#{DOMAIN_NAME}" do |srv|
       srv.vm.hostname = "consul#{n}.#{DOMAIN_NAME}"
       srv.vm.network :private_network, ip: "#{NETWORK_SUBNET}.#{SERVER_HOST_IPS_START + n}"
-
-
       srv.vm.box = VM_BOX
-      srv.vm.provider PROVIDER do |provider|
-     # Display the VirtualBox GUI when booting the machine
+      srv.vm.provider PROVIDER do |provider|  
           provider.gui = ENABLE_VB_GUI
           provider.memory = SERVER_MEMORY
           provider.linked_clone = LINK_CLONES
-      end
+      end  
     end
   end
 
@@ -41,16 +47,110 @@ Vagrant.configure("2") do |config|
     config.vm.define "worker#{n}.#{DOMAIN_NAME}" do |wrk|
       wrk.vm.hostname = "worker#{n}.#{DOMAIN_NAME}"
       wrk.vm.network :private_network, ip: "#{NETWORK_SUBNET}.#{WORKER_HOST_IPS_START + n}"
-
-
       wrk.vm.box = VM_BOX
       wrk.vm.provider PROVIDER do |provider|
-     # Display the VirtualBox GUI when booting the machine
           provider.gui = ENABLE_VB_GUI
           provider.memory = WORKER_MEMORY
           provider.linked_clone = LINK_CLONES
       end
+      if n == NUM_WORKER_NODES
+        wrk.vm.provision "ansible" do |ansible|
+            ansible.limit = "all"
+            ansible.playbook = "#{PLAYBOOK_DIR}/main.yml"
+            ansible.verbose = true
+            ansible.host_key_checking = false
+            ansible.raw_ssh_args  = [
+              "-o ForwardAgent=yes",
+              "-o ControlMaster=auto",
+              "-o ControlPersist=60s"
+            ]
+            ansible.galaxy_role_file = "#{PLAYBOOK_DIR}/roles/requirements.yml"
+            ansible.groups = {
+              "consul_instances" => [
+                      "consul1.cluster",
+                      "consul2.cluster",
+                      "consul3.cluster",
+                      "worker1.cluster",
+                      "worker2.cluster", 
+                      "worker3.cluster" 
+                    ],
+              "nomad_instances" => [
+                      "consul1.cluster",
+                      "consul2.cluster",
+                      "consul3.cluster",
+                      "worker1.cluster",
+                      "worker2.cluster", 
+                      "worker3.cluster" 
+                    ]
+            }
+            ansible.host_vars = {
+                  "consul1.cluster" => {
+                    "consul_node_role" => "bootstrap", 
+                    "nomad_node_role" => "server",
+                  },
+                  "consul2.cluster" => {
+                    "consul_node_role" => "server",
+                    "nomad_node_role" => "server",
+                  },
+                  "consul3.cluster" => {
+                    "consul_node_role" => "server",
+                    "nomad_node_role" => "server",
+                  },
+                  "worker1.cluster" => {
+                    "consul_node_role" => "client",
+                    "nomad_node_role" => "client"
+                  },
+                  "worker2.cluster" => {
+                    "consul_node_role" => "client",
+                    "nomad_node_role" => "client"
+                  },
+                  "worker3.cluster" => {
+                    "consul_node_role" => "client",
+                    "nomad_node_role" => "client"
+                  }
+
+            } 
+            ansible.extra_vars = {
+                consul_iface: "enp0s8",
+                consul_dnsmasq_enable: "true",
+                nomad_iface: "enp0s8", 
+                nomad_docker_enable: "true",
+                nomad_use_consul: "true"
+            }
+            ansible.tags = ["consul", "nomad"]
+        end
+      end
     end
   end
 
+  (1..NUM_GW_NODES).each do |n|
+      config.vm.define "gw#{n}.#{DOMAIN_NAME}" do |gw|
+        gw.vm.hostname = "gw#{n}.#{DOMAIN_NAME}"
+        gw.vm.network :private_network, ip: "#{NETWORK_SUBNET}.#{GW_HOST_IPS_START + n}"
+        gw.vm.box = VM_BOX
+        gw.vm.provider PROVIDER do |provider|
+            provider.gui = ENABLE_VB_GUI
+            provider.memory = GW_MEMORY
+            provider.linked_clone = LINK_CLONES
+        end
+
+        if n == NUM_GW_NODES
+          gw.vm.provision "ansible" do |ansible|
+              ansible.playbook = "#{PLAYBOOK_DIR}/main.yml"
+              ansible.verbose = true
+              ansible.host_key_checking = false
+            
+              ansible.raw_ssh_args  = [
+                "-o ForwardAgent=yes",
+                "-o ControlMaster=auto",
+                "-o ControlPersist=60s"
+              ]
+              ansible.extra_vars = {
+
+              }
+              ansible.tags = ["gw"]
+              end
+          end
+        end
+  end
 end
