@@ -16,15 +16,15 @@
  
   ignore_errors: yes
 
+- name: Install Docker on workers
+  apt: 
+    name: docker.io
+    state: present
+  when: "'worker' in inventory_hostname"
 
 - name: Disable systemd-resolved 
   ansible.builtin.systemd:
     name: systemd-resolved
     state: stopped
     enabled: no
-
-- name: Install Docker on workers
-  apt: 
-    name: docker.io
-    state: present
-  when: "'worker' in inventory_hostname"
+  when: "'consul' in inventory_hostname"
