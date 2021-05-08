@@ -113,6 +113,7 @@ Vagrant.configure("2") do |config|
             ansible.extra_vars = {
                 consul_iface: "enp0s8",
                 consul_dnsmasq_enable: "true",
+                consul_recursors: "[1.1.1.1, 8.8.8.8]",
                 nomad_iface: "enp0s8", 
                 nomad_docker_enable: "true",
                 nomad_use_consul: "true"
