@@ -15,3 +15,12 @@
     autoremove: yes
  
   ignore_errors: yes
+
+
+
+- name: Disable systemd-resolved 
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: stopped
+    enabled: no
+    

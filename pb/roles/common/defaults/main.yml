@@ -10,4 +10,6 @@ apt_packages:
   - jq
   - mc
   - libcgroup1
+  - dnsmasq
+  
 
