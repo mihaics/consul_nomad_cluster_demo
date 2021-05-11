@@ -77,7 +77,7 @@ $vagrant plugin install virtualbox
 cd in your working directory and clone the repository:
 
 ```
-git clone git@github.com:mihaics/consul_nomad_cluster_demo.github
+git clone https://github.com/mihaics/consul_nomad_cluster_demo.git
 ```
 
 cd in vbox directory (should contain the Vagrantfile) and run vagrant up:
@@ -113,7 +113,7 @@ Examples to access the main server):
 $vagrant ssh consul1.cluster
 ```
 
-Mor einformation about ssh connection can be obtained from vagrat:
+More information about ssh connection can be obtained from vagrat:
 
 ```
 $vagrant ssh-config consul1.Cluster
@@ -145,13 +145,13 @@ worker3  192.168.56.103:8301  alive   client  1.8.7  2         dc1  <default>
 ```
 
 For nomad, use the expenal IP:
-
+```
 vagrant@consul1:~$ nomad server members -address=http://192.168.56.11:4646/
 Name            Address        Port  Status  Leader  Protocol  Build  Datacenter  Region
 consul1.global  192.168.56.11  4648  alive   false   2         1.0.4  dc1         global
 consul2.global  192.168.56.12  4648  alive   true    2         1.0.4  dc1         global
 consul3.global  192.168.56.13  4648  alive   false   2         1.0.4  dc1         global
-
+```
 
 DNS is forwarding the requests to consul, so you can use actually the resolver:
 
@@ -276,7 +276,7 @@ docs-example-server.service.dc1.consul.	0 IN A	10.0.2.15
 ;; MSG SIZE  rcvd: 83
 ```
 
-The VM has 2 interfaces, docker binds to the first one.
+The VM has 2 interfaces, docker binds to the first one, where the default route is set.
 
 TODO: fix interface binding for app (cni? vagrant option to delete the NAT interface?, docker binding to private_network?)
 

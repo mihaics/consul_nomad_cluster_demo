@@ -3,12 +3,11 @@ job "docs" {
 
   group "example" {
     network {
-    
       port "http" {
         static = "5678"
-  
       }
     }
+
     task "server" {
       service {
         tags = ["demo", "docs"]
